@@ -12,6 +12,12 @@ import (
 	com "aws-iam-enumerator/pkg/common"
 )
 
+func Use(vals ...interface{}) {
+	for _, val := range vals {
+		_ = val
+	}
+}
+
 func handleIAM(ctx context.Context, awsConfig awsconfig.AWSConfig) error {
 	// Create IAM client
 	graph := com.OpenGraphFormat{Metadata: struct {
@@ -28,15 +34,15 @@ func handleIAM(ctx context.Context, awsConfig awsconfig.AWSConfig) error {
 
 	myIamClient := customIam.NewIAMService(iamClient)
 
-	policies, policiesVersionEdge := myIamClient.ListPolicies(ctx)
-	users, userList := myIamClient.ListUsers(ctx)
-	roles, roleDetails := myIamClient.ListRoles(ctx)
-	userPermissionsNodes, userPermissionsEdges := myIamClient.GetUsersPermissions(ctx, userList)
+	// policies, policiesVersionEdge := myIamClient.ListPolicies(ctx)
+	users, userDetails := myIamClient.ListUsers(ctx)
+	roles, assumeRolePolicyEdges, roleDetails := myIamClient.ListRoles(ctx)
+	// Use(roles, assumeRolePolicyEdges, roleDetails, graph)
+	userPermissionsNodes, userPermissionsEdges := myIamClient.GetUsersPermissions(ctx, userDetails)
 	rolePermissionsNodes, rolePermissionsEdges := myIamClient.GetRolesPermissions(ctx, roleDetails)
 
-	graph.Graph.Nodes = slices.Concat(graph.Graph.Nodes, policies, users, roles, userPermissionsNodes, rolePermissionsNodes)
-	graph.Graph.Edges = slices.Concat(graph.Graph.Edges, userPermissionsEdges, rolePermissionsEdges, policiesVersionEdge)
-
+	graph.Graph.Nodes = slices.Concat(graph.Graph.Nodes, users, roles, userPermissionsNodes, rolePermissionsNodes)
+	graph.Graph.Edges = slices.Concat(graph.Graph.Edges, userPermissionsEdges, rolePermissionsEdges, assumeRolePolicyEdges)
 	com.WriteToFile(graph, "C:\\Users\\Bob\\Desktop\\dev\\aws-enumerator\\bobber.json")
 
 	return nil

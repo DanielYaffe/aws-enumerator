@@ -1,10 +1,10 @@
 package common
 
 type Edge struct {
-	Start      EdgeQuery      `json:"start"`
-	End        EdgeQuery      `json:"end"`
-	Kind       string         `json:"kind"`
-	Properties map[string]any `json:"properties,omitempty"`
+	Start      EdgeQuery `json:"start"`
+	End        EdgeQuery `json:"end"`
+	Kind       string    `json:"kind"`
+	Properties any       `json:"properties,omitempty"`
 }
 
 type EdgeQuery struct {
@@ -14,9 +14,9 @@ type EdgeQuery struct {
 }
 
 type Node struct {
-	Id         string         `json:"id"`
-	Kinds      []string       `json:"kinds"`
-	Properties map[string]any `json:"properties"`
+	Id         string   `json:"id"`
+	Kinds      []string `json:"kinds"`
+	Properties any      `json:"properties,omitempty"`
 }
 
 type OpenGraphFormat struct {

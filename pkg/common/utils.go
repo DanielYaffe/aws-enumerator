@@ -3,6 +3,7 @@ package common
 import (
 	"encoding/json"
 	"os"
+	"reflect"
 	"strconv"
 )
 
@@ -15,35 +16,59 @@ type RoleDetails struct {
 	Arn      string
 }
 
-func StructToMap(s any) (map[string]any, error) {
-	data, err := json.Marshal(s)
-	if err != nil {
-		return nil, err
+func StructToMap(s any) map[string]any {
+	result := make(map[string]any)
+	v := reflect.ValueOf(s)
+	t := reflect.TypeOf(s)
+
+	// Handle pointer to struct
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return result
+		}
+		v = v.Elem()
+		t = t.Elem()
 	}
 
-	var result map[string]any
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+	if v.Kind() != reflect.Struct {
+		return result
 	}
 
-	// Clean up the result
-	cleanResult := make(map[string]any)
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		fieldType := t.Field(i)
 
-	for key, value := range result {
-		// Skip null values
-		if value == nil {
+		// Skip unexported fields
+		if !field.CanInterface() {
 			continue
 		}
 
+		fieldName := fieldType.Name
+
+		var value any
+		if field.Kind() == reflect.Pointer {
+			if field.IsNil() {
+				continue // Skip nil values
+			}
+			value = field.Elem().Interface()
+		} else if field.Kind() == reflect.Slice && field.IsNil() {
+			continue
+		} else {
+			value = field.Interface()
+		}
+
+		if value == nil {
+			continue
+		}
 		// Convert bools to strings
 		if boolVal, ok := value.(bool); ok {
-			cleanResult[key] = strconv.FormatBool(boolVal)
+			result[fieldName] = strconv.FormatBool(boolVal)
 		} else {
-			cleanResult[key] = value
+			result[fieldName] = value
 		}
 	}
 
-	return cleanResult, nil
+	return result
 }
 
 func WriteToFile[T any](obj T, filename string) error {

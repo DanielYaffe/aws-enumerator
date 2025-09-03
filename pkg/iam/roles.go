@@ -11,7 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 )
 
-func (c *IAMService) ListRoles(ctx context.Context) ([]com.Node, []com.RoleDetails) {
+func (c *IAMService) ListRoles(ctx context.Context) ([]com.Node, []com.Edge, []com.RoleDetails) {
+	allNodes := []com.Node{}
+	allEdges := []com.Edge{}
+	roleDetails := []com.RoleDetails{}
 	input := &iam.ListRolesInput{
 		MaxItems: aws.Int32(500),
 	}
@@ -33,27 +36,38 @@ func (c *IAMService) ListRoles(ctx context.Context) ([]com.Node, []com.RoleDetai
 		roles = append(roles, roleData.Roles...)
 
 	}
-	nodes := []com.Node{}
-	roleDetails := []com.RoleDetails{}
 
 	for _, role := range roles {
-		data, err := com.StructToMap(role)
-		if err != nil {
-			log.Fatalf("failed to convert struct to json: %v", err)
-		}
-
+		data := com.StructToMap(role)
+		assumeRolePolicyDocument := role.AssumeRolePolicyDocument
+		delete(data, "AssumeRolePolicyDocument")
 		roleNode := com.Node{
 			Id:         *role.Arn,
-			Kinds:      []string{"Policy"},
+			Kinds:      []string{"Role"},
 			Properties: data,
 		}
+		assumeRolePolicy := com.Node{
+			Id:    "policy-" + *role.Arn,
+			Kinds: []string{"Policy", "AssumeRolePolicy"},
+		}
+
+		roleToPolicy := com.Edge{
+			Start: com.EdgeQuery{Value: *role.Arn, Kind: cfg.BaseLabel},
+			End:   com.EdgeQuery{Value: "policy-" + *role.Arn, Kind: cfg.BaseLabel},
+			Kind:  "ASSUME_ROLE_POLICY",
+		}
+
 		roleDetails = append(roleDetails, com.RoleDetails{
 			RoleName: *role.RoleName,
 			Arn:      *role.Arn,
 		})
-		nodes = append(nodes, roleNode)
+		allNodes = append(allNodes, roleNode, assumeRolePolicy)
+		nodes, edges := c.DecodePolicyDocument(ctx, assumeRolePolicyDocument, "policy-"+*role.Arn)
+		allEdges = append(allEdges, roleToPolicy)
+		allEdges = append(allEdges, edges...)
+		allNodes = append(allNodes, nodes...)
 	}
-	return nodes, roleDetails
+	return allNodes, allEdges, roleDetails
 }
 
 func (c *IAMService) GetRolesAttachedPolicies(ctx context.Context, rolesDetails []com.RoleDetails) []com.Edge {
@@ -79,6 +93,7 @@ func (c *IAMService) GetRoleAttachedPolicies(ctx context.Context, roleDetails co
 		formattedRole := com.Edge{
 			Start: com.EdgeQuery{Value: roleDetails.Arn, Kind: cfg.BaseLabel},
 			End:   com.EdgeQuery{Value: *rolePolicy.PolicyArn, Kind: cfg.BaseLabel},
+			Kind:  "ATTACHED_POLICY",
 		}
 		edges = append(edges, formattedRole)
 	}
@@ -113,8 +128,8 @@ func (c *IAMService) ListRoleInlinePolicies(ctx context.Context, roleDetails com
 }
 
 func (c *IAMService) GetRoleInlinePolicies(ctx context.Context, role com.RoleDetails, policyNames []string) ([]com.Node, []com.Edge) {
-	formattedPolicies := []com.Node{}
-	edges := []com.Edge{}
+	allNodes := []com.Node{}
+	allEdges := []com.Edge{}
 	for _, policy := range policyNames {
 		input := &iam.GetRolePolicyInput{
 			RoleName:   &role.RoleName,
@@ -126,27 +141,12 @@ func (c *IAMService) GetRoleInlinePolicies(ctx context.Context, role com.RoleDet
 			log.Fatalf("List policies failed: %v", err)
 		}
 
-		data, err := com.StructToMap(policyData)
-		if err != nil {
-			log.Fatalf("failed to convert struct to json: %v", err)
-		}
+		nodes, edges := c.GetInlinePolicies(ctx, policyData.PolicyDocument, policy, role.Arn)
+		allNodes = append(allNodes, nodes...)
+		allEdges = append(edges, edges...)
 
-		formattedPolicy := com.Node{
-			Id:         role.Arn + "-" + *policyData.PolicyName,
-			Kinds:      []string{"Policy"},
-			Properties: data,
-		}
-
-		policyEdge := com.Edge{
-			Start: com.EdgeQuery{Value: role.Arn, Kind: cfg.BaseLabel},
-			End:   com.EdgeQuery{Value: role.Arn + "-" + *policyData.PolicyName, Kind: cfg.BaseLabel},
-			Kind:  "RoleInlinePolicy",
-		}
-
-		formattedPolicies = append(formattedPolicies, formattedPolicy)
-		edges = append(edges, policyEdge)
 	}
-	return formattedPolicies, edges
+	return allNodes, allEdges
 
 }
 

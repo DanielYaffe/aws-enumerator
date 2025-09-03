@@ -37,14 +37,10 @@ func (c *IAMService) ListUsers(ctx context.Context) ([]com.Node, []com.UserDetai
 	userList := []com.UserDetails{}
 
 	for _, user := range users {
-		data, err := com.StructToMap(user)
-		if err != nil {
-			log.Fatalf("failed to convert struct to json: %v", err)
-		}
-
+		data := com.StructToMap(user)
 		formattedUser := com.Node{
 			Id:         *user.Arn,
-			Kinds:      []string{"User"},
+			Kinds:      []string{"AwsUser"},
 			Properties: data,
 		}
 
@@ -105,7 +101,7 @@ func (c *IAMService) getUserAttachedPolicies(ctx context.Context, user com.UserD
 		formattedPolicy := com.Edge{
 			Start: com.EdgeQuery{Value: user.Arn, Kind: cfg.BaseLabel},
 			End:   com.EdgeQuery{Value: *policy.PolicyArn, Kind: cfg.BaseLabel},
-			Kind:  "UserAttachedPolicy",
+			Kind:  "ATTACHED_POLICY",
 		}
 
 		formattedPolicies = append(formattedPolicies, formattedPolicy)
@@ -141,8 +137,8 @@ func (c *IAMService) ListUserInlinePolicies(ctx context.Context, user com.UserDe
 }
 
 func (c *IAMService) GetUserInlinePolicies(ctx context.Context, user com.UserDetails, policyNames []string) ([]com.Node, []com.Edge) {
-	formattedPolicies := []com.Node{}
-	edges := []com.Edge{}
+	allNodes := []com.Node{}
+	allEdges := []com.Edge{}
 	for _, policy := range policyNames {
 		input := &iam.GetUserPolicyInput{
 			UserName:   &user.Username,
@@ -154,34 +150,19 @@ func (c *IAMService) GetUserInlinePolicies(ctx context.Context, user com.UserDet
 			log.Fatalf("List policies failed: %v", err)
 		}
 
-		data, err := com.StructToMap(policyData)
-		if err != nil {
-			log.Fatalf("failed to convert struct to json: %v", err)
-		}
+		nodes, edges := c.GetInlinePolicies(ctx, policyData.PolicyDocument, policy, user.Arn)
+		allNodes = append(allNodes, nodes...)
+		allEdges = append(edges, edges...)
 
-		formattedPolicy := com.Node{
-			Id:         user.Arn + "-" + *policyData.PolicyName,
-			Kinds:      []string{"Policy"},
-			Properties: data,
-		}
-
-		policyEdge := com.Edge{
-			Start: com.EdgeQuery{Value: user.Arn, Kind: cfg.BaseLabel},
-			End:   com.EdgeQuery{Value: user.Arn + "-" + *policyData.PolicyName, Kind: cfg.BaseLabel},
-			Kind:  "UserInlinePolicy",
-		}
-
-		formattedPolicies = append(formattedPolicies, formattedPolicy)
-		edges = append(edges, policyEdge)
 	}
-	return formattedPolicies, edges
+	return allNodes, allEdges
 }
 
-func (c *IAMService) GetUsersPermissions(ctx context.Context, userList []com.UserDetails) ([]com.Node, []com.Edge) {
+func (c *IAMService) GetUsersPermissions(ctx context.Context, userDetails []com.UserDetails) ([]com.Node, []com.Edge) {
 	allNodes := []com.Node{}
 	allEdges := []com.Edge{}
-	inlineNodes, inlineEdges := c.GetUsersInlinePolicies(ctx, userList)
-	attachedEdges := c.GetUsersAttachedPolicies(ctx, userList)
+	inlineNodes, inlineEdges := c.GetUsersInlinePolicies(ctx, userDetails)
+	attachedEdges := c.GetUsersAttachedPolicies(ctx, userDetails)
 	allNodes = append(allNodes, inlineNodes...)
 	allEdges = slices.Concat(allEdges, inlineEdges, attachedEdges)
 
