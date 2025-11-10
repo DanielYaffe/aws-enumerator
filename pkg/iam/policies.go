@@ -333,23 +333,25 @@ func (c *IAMService) DecodePolicyDocument(ctx context.Context, policyDocument *s
 			End:   com.EdgeQuery{Value: policyIdentifier + "-stmt-" + fmt.Sprint(index), Kind: cfg.BaseLabel},
 			Kind:  "CONTAINS_STATEMENT",
 		})
-		for operator, conditionMap := range *statement.Condition {
-			for key, conditionValue := range conditionMap {
-				for _, value := range conditionValue {
-					nodes = append(nodes, com.Node{
-						Id:    policyIdentifier + "-stmt-" + fmt.Sprint(index) + "-" + operator + "-" + key + "-" + value,
-						Kinds: []string{"Condition"},
-						Properties: map[string]any{
-							"operator": operator,
-							"key":      key,
-							"value":    value,
-						},
-					})
-					edges = append(edges, com.Edge{
-						Start: com.EdgeQuery{Value: policyIdentifier + "-" + fmt.Sprint(index), Kind: cfg.BaseLabel},
-						End:   com.EdgeQuery{Value: policyIdentifier + "-stmt-" + fmt.Sprint(index) + "-" + operator + "-" + key + "-" + value, Kind: cfg.BaseLabel},
-						Kind:  "HAS_CONDITION",
-					})
+		if statement.Condition != nil {
+			for operator, conditionMap := range *statement.Condition {
+				for key, conditionValue := range conditionMap {
+					for _, value := range conditionValue {
+						nodes = append(nodes, com.Node{
+							Id:    policyIdentifier + "-stmt-" + fmt.Sprint(index) + "-" + operator + "-" + key + "-" + value,
+							Kinds: []string{"Condition"},
+							Properties: map[string]any{
+								"operator": operator,
+								"key":      key,
+								"value":    value,
+							},
+						})
+						edges = append(edges, com.Edge{
+							Start: com.EdgeQuery{Value: policyIdentifier, Kind: cfg.BaseLabel},
+							End:   com.EdgeQuery{Value: policyIdentifier + "-stmt-" + fmt.Sprint(index) + "-" + operator + "-" + key + "-" + value, Kind: cfg.BaseLabel},
+							Kind:  "HAS_CONDITION",
+						})
+					}
 				}
 			}
 		}

@@ -12,7 +12,7 @@ import (
 	com "aws-iam-enumerator/pkg/common"
 )
 
-func Use(vals ...interface{}) {
+func Use(vals ...any) {
 	for _, val := range vals {
 		_ = val
 	}
